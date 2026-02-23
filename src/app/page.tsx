@@ -32,7 +32,7 @@ export default function Home() {
       </SignedOut>
 
       <SignedIn>
-        <div className="flex h-screen w-full">
+        <div className="flex h-full w-full">
           {/* LEFT SIDE: Sidebar */}
           <div className={`${activeConversation ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
             <Sidebar onSelectConversation={(id) => setActiveConversation(id)} />

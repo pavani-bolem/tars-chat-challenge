@@ -109,7 +109,7 @@ export function ChatWindow({
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-950 relative overflow-hidden" onClick={() => setSelectedMessageId(null)}>
       
       {/* HEADER */}
-      <div className="p-4 border-b dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center gap-3 z-10 shrink-0">
+      <div className="p-4 pt-[max(1rem,env(safe-area-inset-top))] border-b dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center gap-3 z-10 shrink-0">
         {onBack && (
           <button onClick={onBack} className="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
