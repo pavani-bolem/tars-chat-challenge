@@ -21,17 +21,26 @@ export default defineSchema({
   conversationMembers: defineTable({
     userId: v.id("users"),
     conversationId: v.id("conversations"),
-    lastReadMessageId: v.optional(v.id("messages")), // Helps calculate unread badges later
+    lastReadMessageId: v.optional(v.id("messages")), 
+    typingUntil: v.optional(v.number()), // 🌟 NEW: Tracks typing expiration
   })
     .index("by_conversationId", ["conversationId"])
     .index("by_userId", ["userId"])
     .index("by_userId_and_conversationId", ["userId", "conversationId"]),
 
   // 4. Messages Table
-  messages: defineTable({
-    conversationId: v.id("conversations"),
-    senderId: v.id("users"),
+messages: defineTable({
     content: v.string(),
-    isDeleted: v.boolean(), // Soft delete requirement
+    senderId: v.id("users"),
+    conversationId: v.id("conversations"),
+    isDeleted: v.optional(v.boolean()),
+    reactions: v.optional(
+      v.array(
+        v.object({
+          userId: v.id("users"),
+          emoji: v.string(),
+        })
+      )
+    ),
   }).index("by_conversationId", ["conversationId"]),
 });

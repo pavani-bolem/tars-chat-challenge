@@ -14,191 +14,215 @@ export function ChatWindow({
 }) {
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // 🌟 NEW: Track which message is currently clicked/selected
   const [selectedMessageId, setSelectedMessageId] = useState<Id<"messages"> | null>(null);
   
-  // Fetch messages, the current user, AND the other user
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+  const prevMessagesLengthRef = useRef(0);
+  const [showNewMessageButton, setShowNewMessageButton] = useState(false);
+  
+  const lastTypedRef = useRef<number>(0);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  
   const messages = useQuery(api.messages.list, { conversationId });
   const me = useQuery(api.users.getMe);
   const otherUser = useQuery(api.users.getOtherUser, { conversationId });
+  const otherTypingUntil = useQuery(api.conversations.getTypingStatus, { conversationId });
   
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
+  const setTyping = useMutation(api.conversations.setTyping);
+  const markRead = useMutation(api.conversations.markRead);
+  const toggleReaction = useMutation(api.messages.toggleReaction);
 
-  // Auto-scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (messages && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (me && lastMessage.senderId !== me._id) {
+        markRead({ conversationId, messageId: lastMessage._id });
+      }
+    }
+  }, [messages, me, conversationId, markRead]);
 
-  // Helper function to format the timestamp
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setShowNewMessageButton(false);
+  };
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isBottom = scrollHeight - scrollTop - clientHeight < 100;
+    isAtBottomRef.current = isBottom;
+    if (isBottom && showNewMessageButton) setShowNewMessageButton(false);
+  };
+
+  useEffect(() => {
+    if (!messages) return;
+    const isNewMessageArrived = messages.length > prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = messages.length;
+    if (isNewMessageArrived) {
+      const lastMessage = messages[messages.length - 1];
+      const isMyMessage = me && lastMessage.senderId === me._id;
+      if (isAtBottomRef.current || isMyMessage) {
+        setTimeout(() => scrollToBottom(), 50);
+      } else {
+        setShowNewMessageButton(true);
+      }
+    }
+  }, [messages, me]);
+
+  useEffect(() => {
+    if (!otherTypingUntil) { setIsOtherTyping(false); return; }
+    const now = Date.now();
+    if (otherTypingUntil > now) {
+      setIsOtherTyping(true);
+      const timeout = setTimeout(() => setIsOtherTyping(false), otherTypingUntil - now);
+      return () => clearTimeout(timeout);
+    } else { setIsOtherTyping(false); }
+  }, [otherTypingUntil]);
+
   const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    setSelectedMessageId(null);
+    const now = Date.now();
+    if (now - lastTypedRef.current > 1500) {
+      setTyping({ conversationId });
+      lastTypedRef.current = now;
+    }
   };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
-
     await sendMessage({ content: newMessage, conversationId });
     setNewMessage(""); 
-    setSelectedMessageId(null); // Hide any open delete buttons when sending a new message
+    setSelectedMessageId(null);
+    scrollToBottom();
   };
 
   return (
-    // If the user clicks anywhere else in the chat window, deselect the message
-    <div className="flex flex-col h-full w-full bg-white" onClick={() => setSelectedMessageId(null)}>
+    <div className="flex flex-col h-full w-full bg-white dark:bg-gray-950 relative overflow-hidden" onClick={() => setSelectedMessageId(null)}>
       
-      {/* 🌟 CHAT HEADER 🌟 */}
-      <div className="p-4 border-b bg-white flex items-center gap-3 shadow-sm z-10">
-        
-        {/* Mobile Back Button */}
+      {/* HEADER */}
+      <div className="p-4 border-b dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center gap-3 z-10">
         {onBack && (
-          <button 
-            onClick={onBack}
-            className="md:hidden p-2 -ml-2 mr-1 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-          >
+          <button onClick={onBack} className="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
           </button>
         )}
-
-        {otherUser === undefined ? (
-          // Loading skeleton while fetching user data
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse"></div>
-            <div className="w-24 h-4 bg-gray-200 rounded animate-pulse"></div>
-          </div>
-        ) : otherUser === null ? (
-          <h3 className="font-semibold text-lg text-gray-800">User Not Found</h3>
-        ) : (
+        {otherUser ? (
           <>
-            {/* Avatar with Online Indicator */}
             <div className="relative">
-              <img
-                src={otherUser.imageUrl || "/placeholder.png"}
-                alt={otherUser.name}
-                className="w-10 h-10 rounded-full object-cover"
-              />
-              {otherUser.isOnline && (
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-              )}
+              <img src={otherUser.imageUrl || "/placeholder.png"} className="w-10 h-10 rounded-full object-cover" />
+              {otherUser.isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-950"></div>}
             </div>
-            
-            {/* Name and Status Text */}
             <div className="flex flex-col">
-              <h3 className="font-semibold text-gray-800 leading-tight">{otherUser.name}</h3>
-              <span className="text-xs text-gray-500">
-                {otherUser.isOnline ? "Online" : "Offline"}
+              <h3 className="font-semibold text-gray-800 dark:text-gray-100 leading-tight">{otherUser.name}</h3>
+              <span className={`text-xs ${isOtherTyping ? "text-blue-500 font-medium" : "text-gray-500 dark:text-gray-400"}`}>
+                {isOtherTyping ? "typing..." : otherUser.isOnline ? "Online" : "Offline"}
               </span>
             </div>
           </>
-        )}
+        ) : <div className="animate-pulse flex gap-3"><div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-full"></div><div className="w-24 h-4 mt-3 bg-gray-200 dark:bg-gray-800 rounded"></div></div>}
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-gray-50">
-        
-        {messages === undefined || me === undefined ? (
-          // Loading State
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-gray-500 text-sm">Loading messages...</p>
-          </div>
-        ) : messages.length === 0 ? (
-          // Empty State: No messages in this conversation
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-sm">
-              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <h3 className="text-gray-800 font-semibold text-lg mb-1">It's quiet here...</h3>
-              <p className="text-gray-500 text-sm">Say hello to start the conversation with {otherUser?.name || "them"}!</p>
-            </div>
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const isMe = msg.senderId === me?._id;
-            // Check if THIS specific message is the one that was clicked
-            const isSelected = selectedMessageId === msg._id;
+      {/* FLOATING BUTTON */}
+      {showNewMessageButton && (
+        <button onClick={scrollToBottom} className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm animate-bounce">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+          New messages
+        </button>
+      )}
 
-            return (
-              <div 
-                key={msg._id} 
-                className={`flex w-full items-center ${isMe ? "justify-end" : "justify-start"}`}
-              >
-                {/* 🌟 DELETE BUTTON: Only shows if it's your message, not deleted, and CURRENTLY CLICKED */}
-                {isMe && !msg.isDeleted && isSelected && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevents the click from instantly deselecting the message
-                      deleteMessage({ messageId: msg._id });
-                      setSelectedMessageId(null);
-                    }}
-                    className="mr-2 px-3 py-1.5 bg-red-100 text-red-600 font-medium rounded-lg text-xs hover:bg-red-200 transition-colors shadow-sm"
-                  >
+      {/* MESSAGES AREA */}
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 bg-gray-50 dark:bg-gray-900">
+        {messages?.map((msg) => {
+          const isMe = msg.senderId === me?._id;
+          const isSelected = selectedMessageId === msg._id;
+          const reactionCounts = (msg.reactions || []).reduce((acc, curr) => {
+            acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+
+          return (
+            <div key={msg._id} className={`flex flex-col ${isMe ? "items-end" : "items-start"} max-w-full`}>
+              
+              {/* EMOJI BAR */}
+              {isSelected && !msg.isDeleted && (
+                <div className="flex gap-1 mb-1.5 bg-white dark:bg-gray-800 border dark:border-gray-700 p-1 rounded-full shadow-sm animate-in fade-in slide-in-from-bottom-1">
+                  {["👍", "❤️", "😂", "😮", "😢"].map((emoji) => (
+                    <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction({ messageId: msg._id, emoji }); }} className="hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className={`flex items-end gap-2 max-w-[85%] ${isMe ? "flex-row" : "flex-row-reverse"}`}>
+                {/* DELETE BUTTON */}
+                {isMe && isSelected && !msg.isDeleted && (
+                  <button onClick={(e) => { e.stopPropagation(); deleteMessage({ messageId: msg._id }); setSelectedMessageId(null); }} className="mb-1 px-3 py-1 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-xs font-medium">
                     Delete
                   </button>
                 )}
 
+                {/* BUBBLE */}
                 <div 
-                  // Toggle selection when the message bubble is clicked
-                  onClick={(e) => {
-                    e.stopPropagation(); // Keep click from reaching the main container
-                    setSelectedMessageId(isSelected ? null : msg._id);
-                  }}
-                  className={`p-3 rounded-2xl max-w-[70%] text-sm shadow-sm flex flex-col cursor-pointer transition-transform active:scale-[0.98] ${
-                    msg.isDeleted
-                      ? "bg-gray-100 text-gray-500 italic" 
-                      : isMe 
-                      ? "bg-blue-600 text-white rounded-br-sm" 
-                      : "bg-white text-gray-800 border border-gray-100 rounded-bl-sm" 
+                  onClick={(e) => { e.stopPropagation(); setSelectedMessageId(isSelected ? null : msg._id); }}
+                  className={`p-3 rounded-2xl shadow-sm flex flex-col cursor-pointer break-words min-w-[60px] ${
+                    msg.isDeleted ? "bg-gray-100 dark:bg-gray-800 text-gray-400 italic" :
+                    isMe ? "bg-blue-600 text-white rounded-br-none" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-700 rounded-bl-none"
                   }`}
                 >
-                  <p>{msg.isDeleted ? "This message was deleted" : msg.content}</p>
-                  
-                  {/* The Timestamp */}
-                  <span 
-                    className={`text-[10px] self-end mt-1 ${
-                      msg.isDeleted 
-                        ? "text-gray-400" 
-                        : isMe 
-                        ? "text-blue-200" 
-                        : "text-gray-400" 
-                    }`}
-                  >
+                  <p className="text-sm leading-relaxed">{msg.isDeleted ? "This message was deleted" : msg.content}</p>
+                  <span className={`text-[10px] self-end mt-1 opacity-70 ${isMe ? "text-blue-100" : "text-gray-400"}`}>
                     {formatTime(msg._creationTime)}
                   </span>
                 </div>
               </div>
-            );
-          })
+
+              {/* REACTION CHIPS */}
+              {Object.keys(reactionCounts).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {Object.entries(reactionCounts).map(([emoji, count]) => (
+                    <div key={emoji} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-full px-2 py-0.5 text-[11px] flex items-center gap-1 shadow-sm">
+                      <span>{emoji}</span> <span className="font-semibold text-gray-600 dark:text-gray-400">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        
+        {/* TYPING INDICATOR */}
+        {isOtherTyping && (
+          <div className="flex w-full justify-start items-center">
+            <div className="px-4 py-3 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl rounded-bl-none shadow-sm flex gap-1.5">
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+            </div>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input Area */}
-      <div className="p-4 bg-white border-t" onClick={(e) => e.stopPropagation()}>
-        <form onSubmit={handleSend} className="flex gap-2">
+      {/* INPUT AREA */}
+      <div className="p-4 bg-white dark:bg-gray-950 border-t dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
+        <form onSubmit={handleSend} className="flex gap-2 max-w-5xl mx-auto">
           <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onFocus={() => setSelectedMessageId(null)} // Hide delete button if they start typing
-            placeholder="Type your message..."
-            className="flex-1 px-4 py-3 bg-gray-100 border-transparent rounded-full focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            type="text" value={newMessage} onChange={handleTyping} placeholder="Type your message..."
+            className="flex-1 px-5 py-3 bg-gray-100 dark:bg-gray-800 dark:text-white rounded-full outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button
-            type="submit"
-            disabled={!newMessage.trim()}
-            className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
+          <button type="submit" disabled={!newMessage.trim()} className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50">
             Send
           </button>
         </form>
