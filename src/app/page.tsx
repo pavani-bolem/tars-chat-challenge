@@ -10,7 +10,7 @@ export default function Home() {
   const [activeConversation, setActiveConversation] = useState<Id<"conversations"> | null>(null);
 
   return (
-    <main className="flex h-screen w-full bg-white dark:bg-gray-950 overflow-hidden transition-colors duration-200">
+    <main className="flex h-[100dvh] w-full bg-white dark:bg-gray-950 overflow-hidden transition-colors duration-200">
       
       <ClerkLoading>
         <div className="flex w-full h-full items-center justify-center bg-gray-50 dark:bg-gray-900">
