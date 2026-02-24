@@ -76,6 +76,7 @@ export const setTyping = mutation({
   }
 });
 
+// 🌟 FIXED: Group-Aware Typing Indicator
 export const getTypingStatus = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
@@ -88,17 +89,16 @@ export const getTypingStatus = query({
       .unique();
     if (!currentUser) return 0;
 
-    // Get all members of this chat
     const memberships = await ctx.db
       .query("conversationMembers")
       .withIndex("by_conversationId", (q) => q.eq("conversationId", args.conversationId))
       .collect();
 
-    // Find the OTHER person
-    const otherMember = memberships.find(m => m.userId !== currentUser._id);
+    // Find the latest typing timestamp from ANYONE else in the chat
+    const otherMembers = memberships.filter(m => m.userId !== currentUser._id);
+    const latestTyping = Math.max(...otherMembers.map(m => m.typingUntil || 0), 0);
     
-    // Return their expiration timestamp (or 0 if they haven't typed)
-    return otherMember?.typingUntil || 0;
+    return latestTyping;
   }
 });
 
@@ -182,7 +182,6 @@ export const getUnreadCounts = query({
   }
 });
 
-// 🌟 NEW: Create a Group Conversation
 export const createGroup = mutation({
   args: {
     name: v.string(),
@@ -198,21 +197,18 @@ export const createGroup = mutation({
       .unique();
     if (!me) throw new Error("User not found");
 
-    // 1. Create the group conversation
     const conversationId = await ctx.db.insert("conversations", {
       isGroup: true,
       groupName: args.name,
       adminId: me._id,
     });
 
-    // 2. Add the creator to the group
     await ctx.db.insert("conversationMembers", {
       userId: me._id,
       conversationId,
       typingUntil: 0,
     });
 
-    // 3. Add all selected friends to the group
     for (const memberId of args.memberIds) {
       await ctx.db.insert("conversationMembers", {
         userId: memberId,
@@ -225,8 +221,6 @@ export const createGroup = mutation({
   },
 });
 
-// Get all conversations for the Sidebar (Groups + 1-on-1s)
-// 🌟 FIXED: Get all conversations for the Sidebar (Groups + 1-on-1s)
 export const getMyConversations = query({
   args: {},
   handler: async (ctx) => {
@@ -258,7 +252,6 @@ export const getMyConversations = query({
           return {
             _id: conversation._id,
             isGroup: true,
-            // Fallback strings prevent undefined errors
             name: conversation.groupName ?? "Unnamed Group",
             memberCount: allMembers.length,
             imageUrl: null, 
@@ -273,7 +266,6 @@ export const getMyConversations = query({
         return {
           _id: conversation._id,
           isGroup: false,
-          // 🌟 The Fix: Using "??" to force undefined into null or safe values
           name: otherUser?.name ?? "Unknown User",
           imageUrl: otherUser?.imageUrl ?? null,
           isOnline: otherUser?.isOnline ?? false,
@@ -283,4 +275,46 @@ export const getMyConversations = query({
 
     return conversationsWithDetails.filter((conv) => conv !== null);
   },
+});
+
+// 🌟 NEW: Get details for the Chat Header (Works for 1-on-1 AND Groups)
+export const getDetails = query({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const me = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!me) return null;
+
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) return null;
+
+    if (conversation.isGroup) {
+      return {
+        name: conversation.groupName ?? "Group Chat",
+        isGroup: true,
+        imageUrl: null,
+      };
+    }
+
+    const memberships = await ctx.db
+      .query("conversationMembers")
+      .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
+      .collect();
+      
+    const otherMember = memberships.find((m) => m.userId !== me._id);
+    if (!otherMember) return null;
+
+    const otherUser = await ctx.db.get(otherMember.userId);
+    return {
+      name: otherUser?.name ?? "Unknown User",
+      isGroup: false,
+      imageUrl: otherUser?.imageUrl ?? null,
+      isOnline: otherUser?.isOnline ?? false,
+    };
+  }
 });

@@ -26,7 +26,8 @@ export function ChatWindow({
   
   const messages = useQuery(api.messages.list, { conversationId });
   const me = useQuery(api.users.getMe);
-  const otherUser = useQuery(api.users.getOtherUser, { conversationId });
+  const convDetails = useQuery(api.conversations.getDetails, { conversationId });
+  const allUsers = useQuery(api.users.getUsers);
   const otherTypingUntil = useQuery(api.conversations.getTypingStatus, { conversationId });
   
   const sendMessage = useMutation(api.messages.send);
@@ -112,25 +113,33 @@ export function ChatWindow({
       <div className="p-4 pt-[max(1rem,env(safe-area-inset-top))] border-b dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center gap-3 z-10 shrink-0">
         {onBack && (
           <button onClick={onBack} className="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
           </button>
         )}
-        {otherUser ? (
+        
+        {/* 🌟 FIXED: Using !convDetails instead of convDetails === undefined */}
+        {!convDetails ? (
+           <div className="animate-pulse flex gap-3"><div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-full"></div><div className="w-24 h-4 mt-3 bg-gray-200 dark:bg-gray-800 rounded"></div></div>
+        ) : (
           <>
             <div className="relative">
-              <img src={otherUser.imageUrl || "/placeholder.png"} className="w-10 h-10 rounded-full object-cover" />
-              {otherUser.isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-950"></div>}
+              {convDetails.isGroup ? (
+                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>
+                </div>
+              ) : (
+                <img src={convDetails.imageUrl || "/placeholder.png"} className="w-10 h-10 rounded-full object-cover" />
+              )}
+              {!convDetails.isGroup && convDetails.isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-950"></div>}
             </div>
             <div className="flex flex-col">
-              <h3 className="font-semibold text-gray-800 dark:text-gray-100 leading-tight">{otherUser.name}</h3>
+              <h3 className="font-semibold text-gray-800 dark:text-gray-100 leading-tight">{convDetails.name}</h3>
               <span className={`text-xs ${isOtherTyping ? "text-blue-500 font-medium" : "text-gray-500 dark:text-gray-400"}`}>
-                {isOtherTyping ? "typing..." : otherUser.isOnline ? "Online" : "Offline"}
+                {isOtherTyping ? "someone is typing..." : convDetails.isGroup ? "Group Chat" : convDetails.isOnline ? "Online" : "Offline"}
               </span>
             </div>
           </>
-        ) : <div className="animate-pulse flex gap-3"><div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-full"></div><div className="w-24 h-4 mt-3 bg-gray-200 dark:bg-gray-800 rounded"></div></div>}
+        )}
       </div>
 
       {/* FLOATING BUTTON */}
@@ -146,6 +155,7 @@ export function ChatWindow({
         {messages?.map((msg) => {
           const isMe = msg.senderId === me?._id;
           const isSelected = selectedMessageId === msg._id;
+          const sender = allUsers?.find(u => u._id === msg.senderId); // Find sender details
           const reactionCounts = (msg.reactions || []).reduce((acc, curr) => {
             acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
             return acc;
@@ -165,7 +175,13 @@ export function ChatWindow({
                 </div>
               )}
 
+              {/* Show Sender Name in Groups */}
+              {convDetails?.isGroup && !isMe && !msg.isDeleted && (
+                <span className="text-[11px] text-gray-500 dark:text-gray-400 ml-10 mb-1">{sender?.name || "User"}</span>
+              )}
+
               <div className={`flex items-end gap-2 max-w-[85%] ${isMe ? "flex-row" : "flex-row-reverse"}`}>
+                
                 {/* DELETE BUTTON */}
                 {isMe && isSelected && !msg.isDeleted && (
                   <button onClick={(e) => { e.stopPropagation(); deleteMessage({ messageId: msg._id }); setSelectedMessageId(null); }} className="mb-1 px-3 py-1 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-xs font-medium">
@@ -174,23 +190,30 @@ export function ChatWindow({
                 )}
 
                 {/* BUBBLE */}
-                <div 
-                  onClick={(e) => { e.stopPropagation(); setSelectedMessageId(isSelected ? null : msg._id); }}
-                  className={`p-3 rounded-2xl shadow-sm flex flex-col cursor-pointer break-words min-w-[60px] ${
-                    msg.isDeleted ? "bg-gray-100 dark:bg-gray-800 text-gray-400 italic" :
-                    isMe ? "bg-blue-600 text-white rounded-br-none" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-700 rounded-bl-none"
-                  }`}
-                >
-                  <p className="text-sm leading-relaxed">{msg.isDeleted ? "This message was deleted" : msg.content}</p>
-                  <span className={`text-[10px] self-end mt-1 opacity-70 ${isMe ? "text-blue-100" : "text-gray-400"}`}>
-                    {formatTime(msg._creationTime)}
-                  </span>
+                <div className={`flex gap-2 items-end ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                  {/* Show Sender Avatar in Groups */}
+                  {convDetails?.isGroup && !isMe && !msg.isDeleted && (
+                    <img src={sender?.imageUrl || "/placeholder.png"} className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
+                  )}
+                  
+                  <div 
+                    onClick={(e) => { e.stopPropagation(); setSelectedMessageId(isSelected ? null : msg._id); }}
+                    className={`p-3 rounded-2xl shadow-sm flex flex-col cursor-pointer break-words min-w-[60px] ${
+                      msg.isDeleted ? "bg-gray-100 dark:bg-gray-800 text-gray-400 italic" :
+                      isMe ? "bg-blue-600 text-white rounded-br-none" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-700 rounded-bl-none"
+                    }`}
+                  >
+                    <p className="text-sm leading-relaxed">{msg.isDeleted ? "This message was deleted" : msg.content}</p>
+                    <span className={`text-[10px] self-end mt-1 opacity-70 ${isMe ? "text-blue-100" : "text-gray-400"}`}>
+                      {formatTime(msg._creationTime)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* REACTION CHIPS */}
               {Object.keys(reactionCounts).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
+                <div className={`flex flex-wrap gap-1 mt-1.5 ${convDetails?.isGroup && !isMe ? "ml-10" : ""}`}>
                   {Object.entries(reactionCounts).map(([emoji, count]) => (
                     <div key={emoji} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-full px-2 py-0.5 text-[11px] flex items-center gap-1 shadow-sm">
                       <span>{emoji}</span> <span className="font-semibold text-gray-600 dark:text-gray-400">{count}</span>
@@ -222,7 +245,7 @@ export function ChatWindow({
             type="text" value={newMessage} onChange={handleTyping} placeholder="Type your message..."
             className="flex-1 px-5 py-3 bg-gray-100 dark:bg-gray-800 dark:text-white rounded-full outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button type="submit" disabled={!newMessage.trim()} className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50">
+          <button type="submit" disabled={!newMessage.trim()} className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-opacity">
             Send
           </button>
         </form>
