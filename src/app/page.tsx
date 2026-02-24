@@ -2,12 +2,41 @@
 
 import { Sidebar } from "../components/sidebar";
 import { SignInButton, SignedIn, SignedOut, ClerkLoading } from "@clerk/nextjs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { ChatWindow } from "../components/chat-window";
 
 export default function Home() {
   const [activeConversation, setActiveConversation] = useState<Id<"conversations"> | null>(null);
+
+  // 🌟 NEW: Listen for hardware back button or swipe gestures
+  useEffect(() => {
+    const handlePopState = () => {
+      // When native back is pressed or swiped, close the chat window
+      setActiveConversation(null);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // 🌟 NEW: Push a history state when opening a chat
+  const handleSelectConversation = (id: Id<"conversations">) => {
+    if (!activeConversation) {
+      // If opening a chat from the mobile list, push a state so the back button works
+      window.history.pushState({ chatOpen: true }, "");
+    } else {
+      // If switching between chats on desktop, replace the state so history doesn't pile up
+      window.history.replaceState({ chatOpen: true }, "");
+    }
+    setActiveConversation(id);
+  };
+
+  // 🌟 NEW: UI Back button triggers the native back action
+  const handleBack = () => {
+    // This tells the browser to go back, which triggers the 'popstate' listener above!
+    window.history.back(); 
+  };
 
   return (
     <main className="flex h-[100dvh] w-full bg-white dark:bg-gray-950 overflow-hidden transition-colors duration-200">
@@ -35,7 +64,8 @@ export default function Home() {
         <div className="flex h-full w-full">
           {/* LEFT SIDE: Sidebar */}
           <div className={`${activeConversation ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
-            <Sidebar onSelectConversation={(id) => setActiveConversation(id)} />
+            {/* 🌟 UPDATED: Use the new handleSelectConversation function */}
+            <Sidebar onSelectConversation={handleSelectConversation} />
           </div>
 
           {/* RIGHT SIDE: Chat Area */}
@@ -43,13 +73,14 @@ export default function Home() {
             {activeConversation ? (
               <ChatWindow 
                 conversationId={activeConversation} 
-                onBack={() => setActiveConversation(null)} 
+                // 🌟 UPDATED: Use the new handleBack function
+                onBack={handleBack} 
               />
             ) : (
               <div className="flex-1 hidden md:flex items-center justify-center">
                 <div className="text-center text-gray-500 dark:text-gray-400">
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Welcome!</h3>
-                  <p className="mt-1">Select a user from the sidebar to start a conversation.</p>
+                  <p className="mt-1">Select a chat from the sidebar to start a conversation.</p>
                 </div>
               </div>
             )}
