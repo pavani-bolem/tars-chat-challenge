@@ -14,7 +14,8 @@ export default defineSchema({
   // 2. Conversations Table
   conversations: defineTable({
     isGroup: v.boolean(),
-    name: v.optional(v.string()), // Only used if it's a group chat
+    groupName: v.optional(v.string()),
+    adminId: v.optional(v.id("users")),
   }),
 
   // 3. Conversation Members Table (Links Users to Conversations)

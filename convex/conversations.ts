@@ -181,3 +181,106 @@ export const getUnreadCounts = query({
     return counts;
   }
 });
+
+// 🌟 NEW: Create a Group Conversation
+export const createGroup = mutation({
+  args: {
+    name: v.string(),
+    memberIds: v.array(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const me = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!me) throw new Error("User not found");
+
+    // 1. Create the group conversation
+    const conversationId = await ctx.db.insert("conversations", {
+      isGroup: true,
+      groupName: args.name,
+      adminId: me._id,
+    });
+
+    // 2. Add the creator to the group
+    await ctx.db.insert("conversationMembers", {
+      userId: me._id,
+      conversationId,
+      typingUntil: 0,
+    });
+
+    // 3. Add all selected friends to the group
+    for (const memberId of args.memberIds) {
+      await ctx.db.insert("conversationMembers", {
+        userId: memberId,
+        conversationId,
+        typingUntil: 0,
+      });
+    }
+
+    return conversationId;
+  },
+});
+
+// 🌟 NEW: Get all conversations for the Sidebar (Groups + 1-on-1s)
+export const getMyConversations = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const me = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!me) return [];
+
+    // Find all chats I am a part of
+    const memberships = await ctx.db
+      .query("conversationMembers")
+      .withIndex("by_userId", (q) => q.eq("userId", me._id))
+      .collect();
+
+    const conversationsWithDetails = await Promise.all(
+      memberships.map(async (m) => {
+        const conversation = await ctx.db.get(m.conversationId);
+        if (!conversation) return null;
+
+        const allMembers = await ctx.db
+          .query("conversationMembers")
+          .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
+          .collect();
+
+        // If it's a group, return group info
+        if (conversation.isGroup) {
+          return {
+            _id: conversation._id,
+            isGroup: true,
+            name: conversation.groupName,
+            memberCount: allMembers.length,
+            imageUrl: null, // We will use a group icon placeholder on the frontend
+          };
+        }
+
+        // If it's 1-on-1, find the OTHER person's info
+        const otherMember = allMembers.find((mem) => mem.userId !== me._id);
+        if (!otherMember) return null;
+
+        const otherUser = await ctx.db.get(otherMember.userId);
+        return {
+          _id: conversation._id,
+          isGroup: false,
+          name: otherUser?.name,
+          imageUrl: otherUser?.imageUrl,
+          isOnline: otherUser?.isOnline,
+        };
+      })
+    );
+
+    // Filter out any nulls and return the list
+    return conversationsWithDetails.filter((conv) => conv !== null);
+  },
+});
