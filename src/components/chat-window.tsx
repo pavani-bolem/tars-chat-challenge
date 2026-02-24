@@ -242,8 +242,12 @@ export function ChatWindow({
       <div className="p-4 bg-white dark:bg-gray-950 border-t dark:border-gray-800 shrink-0" onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSend} className="flex gap-2 max-w-5xl mx-auto">
           <input
-            type="text" value={newMessage} onChange={handleTyping} placeholder="Type your message..."
-            className="flex-1 px-5 py-3 bg-gray-100 dark:bg-gray-800 dark:text-white rounded-full outline-none focus:ring-2 focus:ring-blue-500"
+            type="text" 
+            value={newMessage} 
+            onChange={handleTyping} 
+            placeholder="Type your message..."
+            // 🌟 FIXED: Added text-gray-900 and explicitly styled the placeholder
+            className="flex-1 px-5 py-3 bg-gray-100 text-gray-900 placeholder-gray-400 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 rounded-full outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button type="submit" disabled={!newMessage.trim()} className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-opacity">
             Send
