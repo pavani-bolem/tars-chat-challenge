@@ -225,7 +225,8 @@ export const createGroup = mutation({
   },
 });
 
-// 🌟 NEW: Get all conversations for the Sidebar (Groups + 1-on-1s)
+// Get all conversations for the Sidebar (Groups + 1-on-1s)
+// 🌟 FIXED: Get all conversations for the Sidebar (Groups + 1-on-1s)
 export const getMyConversations = query({
   args: {},
   handler: async (ctx) => {
@@ -238,7 +239,6 @@ export const getMyConversations = query({
       .unique();
     if (!me) return [];
 
-    // Find all chats I am a part of
     const memberships = await ctx.db
       .query("conversationMembers")
       .withIndex("by_userId", (q) => q.eq("userId", me._id))
@@ -254,33 +254,33 @@ export const getMyConversations = query({
           .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
           .collect();
 
-        // If it's a group, return group info
         if (conversation.isGroup) {
           return {
             _id: conversation._id,
             isGroup: true,
-            name: conversation.groupName,
+            // Fallback strings prevent undefined errors
+            name: conversation.groupName ?? "Unnamed Group",
             memberCount: allMembers.length,
-            imageUrl: null, // We will use a group icon placeholder on the frontend
+            imageUrl: null, 
           };
         }
 
-        // If it's 1-on-1, find the OTHER person's info
         const otherMember = allMembers.find((mem) => mem.userId !== me._id);
         if (!otherMember) return null;
 
         const otherUser = await ctx.db.get(otherMember.userId);
+        
         return {
           _id: conversation._id,
           isGroup: false,
-          name: otherUser?.name,
-          imageUrl: otherUser?.imageUrl,
-          isOnline: otherUser?.isOnline,
+          // 🌟 The Fix: Using "??" to force undefined into null or safe values
+          name: otherUser?.name ?? "Unknown User",
+          imageUrl: otherUser?.imageUrl ?? null,
+          isOnline: otherUser?.isOnline ?? false,
         };
       })
     );
 
-    // Filter out any nulls and return the list
     return conversationsWithDetails.filter((conv) => conv !== null);
   },
 });
