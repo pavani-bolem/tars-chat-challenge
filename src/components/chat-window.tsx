@@ -14,7 +14,7 @@ export function ChatWindow({
 }) {
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  const [failedMessages, setFailedMessages] = useState<{id: string, text: string}[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<Id<"messages"> | null>(null);
   
@@ -99,24 +99,49 @@ export function ChatWindow({
     }
   };
 
-  // 🌟 FIXED: Graceful error handling and retry logic
-  const handleSend = async (e?: React.FormEvent, retryText?: string) => {
+  // Graceful error handling with Offline Detection
+  const handleSend = async (e?: React.FormEvent, retryId?: string, retryText?: string) => {
     if (e) e.preventDefault();
     
     const textToSend = retryText || newMessage;
-    if (!textToSend.trim() || isSending) return;
+    
+    // Don't send if empty, or if we are already sending a NEW message (allow retries to bypass this)
+    if (!textToSend.trim() || (isSending && !retryText)) return;
+
+    if (!retryText) setNewMessage(""); // Clear input immediately for new messages
+    const attemptId = retryId || Date.now().toString(); // Give it a unique ID
+
+    // Instantly fail if the user's device has no internet
+    if (!navigator.onLine) {
+      setFailedMessages(prev => {
+        // Prevent adding duplicates if they spam the retry button
+        if (!prev.find(m => m.id === attemptId)) {
+          return [...prev, { id: attemptId, text: textToSend }];
+        }
+        return prev;
+      });
+      scrollToBottom();
+      return; 
+    }
 
     setIsSending(true);
-    if (!retryText) setNewMessage(""); // Clear input immediately for smooth UI
-    setFailedMessage(null); // Clear previous errors
 
     try {
       await sendMessage({ content: textToSend, conversationId });
+      // If successful and it was a retry, remove it from the failed list!
+      if (retryId) {
+        setFailedMessages(prev => prev.filter(m => m.id !== retryId));
+      }
       scrollToBottom();
     } catch (error) {
       console.error("Failed to send message:", error);
-      // If it fails, save the text so the user can retry!
-      setFailedMessage(textToSend);
+      // Add to failed list if the server rejects it
+      setFailedMessages(prev => {
+        if (!prev.find(m => m.id === attemptId)) {
+          return [...prev, { id: attemptId, text: textToSend }];
+        }
+        return prev;
+      });
       scrollToBottom();
     } finally {
       setIsSending(false);
@@ -242,28 +267,34 @@ export function ChatWindow({
           );
         })}
 
-        {/* 🌟 NEW: Failed Message Bubble */}
-        {failedMessage && (
-          <div className="flex flex-col items-end max-w-full animate-in fade-in slide-in-from-bottom-2">
+        {/* Loop through ALL failed messages */}
+        {failedMessages.map((failedMsg) => (
+          <div key={failedMsg.id} className="flex flex-col items-end max-w-full animate-in fade-in slide-in-from-bottom-2">
             <div className="flex items-end gap-2 max-w-[85%] flex-row">
               <div className="p-3 rounded-2xl shadow-sm flex flex-col bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-br-none text-red-900 dark:text-red-100">
-                <p className="text-sm leading-relaxed">{failedMessage}</p>
+                <p className="text-sm leading-relaxed">{failedMsg.text}</p>
                 <div className="flex items-center justify-end gap-3 mt-2 border-t border-red-200 dark:border-red-800/50 pt-1.5">
                   <span className="text-[10px] text-red-500 dark:text-red-400 flex items-center gap-1">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
                     Failed to send
                   </span>
-                  <button onClick={() => handleSend(undefined, failedMessage)} className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline">
+                  <button 
+                    onClick={() => handleSend(undefined, failedMsg.id, failedMsg.text)} 
+                    className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline"
+                  >
                     Retry
                   </button>
-                  <button onClick={() => setFailedMessage(null)} className="text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                  <button 
+                    onClick={() => setFailedMessages(prev => prev.filter(m => m.id !== failedMsg.id))} 
+                    className="text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  >
                     Cancel
                   </button>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        ))}
         
         {/* TYPING INDICATOR */}
         {isOtherTyping && (
