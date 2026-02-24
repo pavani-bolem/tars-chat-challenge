@@ -130,6 +130,7 @@ export const markRead = mutation({
   }
 });
 
+// 🌟 FIXED: Unread counts mapped to Conversation ID instead of User ID
 export const getUnreadCounts = query({
   args: {},
   handler: async (ctx) => {
@@ -150,14 +151,7 @@ export const getUnreadCounts = query({
     const counts: Record<string, number> = {};
 
     for (const mem of memberships) {
-      const allMembers = await ctx.db
-        .query("conversationMembers")
-        .withIndex("by_conversationId", (q) => q.eq("conversationId", mem.conversationId))
-        .collect();
-        
-      const otherMember = allMembers.find(m => m.userId !== user._id);
-      if (!otherMember) continue;
-
+      // Get all messages for this specific conversation
       const messages = await ctx.db
         .query("messages")
         .withIndex("by_conversationId", (q) => q.eq("conversationId", mem.conversationId))
@@ -167,15 +161,16 @@ export const getUnreadCounts = query({
       if (mem.lastReadMessageId) {
         const lastReadMsg = await ctx.db.get(mem.lastReadMessageId);
         if (lastReadMsg) {
-          // Count messages sent AFTER your last read message by the OTHER person
+          // Count messages sent AFTER your last read message that weren't sent by you
           unread = messages.filter(m => m._creationTime > lastReadMsg._creationTime && m.senderId !== user._id).length;
         }
       } else {
-        // If never read, all messages from the other person are unread
+        // If never read, all messages from anyone else are unread
         unread = messages.filter(m => m.senderId !== user._id).length;
       }
       
-      counts[otherMember.userId] = unread;
+      // 🌟 THE FIX: Map the count to the conversationId so the Sidebar can find it!
+      counts[mem.conversationId] = unread;
     }
     
     return counts;
