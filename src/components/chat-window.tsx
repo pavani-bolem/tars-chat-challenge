@@ -13,6 +13,8 @@ export function ChatWindow({
   onBack?: () => void;
 }) {
   const [newMessage, setNewMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<Id<"messages"> | null>(null);
   
@@ -97,13 +99,28 @@ export function ChatWindow({
     }
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
-    await sendMessage({ content: newMessage, conversationId });
-    setNewMessage(""); 
-    setSelectedMessageId(null);
-    scrollToBottom();
+  // 🌟 FIXED: Graceful error handling and retry logic
+  const handleSend = async (e?: React.FormEvent, retryText?: string) => {
+    if (e) e.preventDefault();
+    
+    const textToSend = retryText || newMessage;
+    if (!textToSend.trim() || isSending) return;
+
+    setIsSending(true);
+    if (!retryText) setNewMessage(""); // Clear input immediately for smooth UI
+    setFailedMessage(null); // Clear previous errors
+
+    try {
+      await sendMessage({ content: textToSend, conversationId });
+      scrollToBottom();
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // If it fails, save the text so the user can retry!
+      setFailedMessage(textToSend);
+      scrollToBottom();
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -224,6 +241,29 @@ export function ChatWindow({
             </div>
           );
         })}
+
+        {/* 🌟 NEW: Failed Message Bubble */}
+        {failedMessage && (
+          <div className="flex flex-col items-end max-w-full animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-end gap-2 max-w-[85%] flex-row">
+              <div className="p-3 rounded-2xl shadow-sm flex flex-col bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-br-none text-red-900 dark:text-red-100">
+                <p className="text-sm leading-relaxed">{failedMessage}</p>
+                <div className="flex items-center justify-end gap-3 mt-2 border-t border-red-200 dark:border-red-800/50 pt-1.5">
+                  <span className="text-[10px] text-red-500 dark:text-red-400 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+                    Failed to send
+                  </span>
+                  <button onClick={() => handleSend(undefined, failedMessage)} className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline">
+                    Retry
+                  </button>
+                  <button onClick={() => setFailedMessage(null)} className="text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* TYPING INDICATOR */}
         {isOtherTyping && (
@@ -249,8 +289,14 @@ export function ChatWindow({
             // 🌟 FIXED: Added text-gray-900 and explicitly styled the placeholder
             className="flex-1 px-5 py-3 bg-gray-100 text-gray-900 placeholder-gray-400 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 rounded-full outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button type="submit" disabled={!newMessage.trim()} className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-opacity">
-            Send
+          <button 
+            type="submit" 
+            disabled={!newMessage.trim() || isSending} 
+            className="px-6 py-2 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 transition-opacity flex items-center gap-2"
+          >
+            {isSending ? (
+               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            ) : "Send"}
           </button>
         </form>
       </div>
