@@ -76,7 +76,7 @@ export const setTyping = mutation({
   }
 });
 
-// 🌟 FIXED: Group-Aware Typing Indicator
+// Group-Aware Typing Indicator
 export const getTypingStatus = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
@@ -130,7 +130,7 @@ export const markRead = mutation({
   }
 });
 
-// 🌟 FIXED: Unread counts mapped to Conversation ID instead of User ID
+// Unread counts mapped to Conversation ID instead of User ID
 export const getUnreadCounts = query({
   args: {},
   handler: async (ctx) => {
@@ -169,7 +169,7 @@ export const getUnreadCounts = query({
         unread = messages.filter(m => m.senderId !== user._id).length;
       }
       
-      // 🌟 THE FIX: Map the count to the conversationId so the Sidebar can find it!
+      // Map the count to the conversationId so the Sidebar can find it!
       counts[mem.conversationId] = unread;
     }
     
@@ -272,7 +272,7 @@ export const getMyConversations = query({
   },
 });
 
-// 🌟 NEW: Get details for the Chat Header (Works for 1-on-1 AND Groups)
+// Get details for the Chat Header (Works for 1-on-1 AND Groups)
 export const getDetails = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {

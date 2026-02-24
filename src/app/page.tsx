@@ -9,7 +9,7 @@ import { ChatWindow } from "../components/chat-window";
 export default function Home() {
   const [activeConversation, setActiveConversation] = useState<Id<"conversations"> | null>(null);
 
-  // 🌟 NEW: Listen for hardware back button or swipe gestures
+  // Listen for hardware back button or swipe gestures
   useEffect(() => {
     const handlePopState = () => {
       // When native back is pressed or swiped, close the chat window
@@ -20,7 +20,7 @@ export default function Home() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  // 🌟 NEW: Push a history state when opening a chat
+  // Push a history state when opening a chat
   const handleSelectConversation = (id: Id<"conversations">) => {
     if (!activeConversation) {
       // If opening a chat from the mobile list, push a state so the back button works
@@ -32,7 +32,7 @@ export default function Home() {
     setActiveConversation(id);
   };
 
-  // 🌟 NEW: UI Back button triggers the native back action
+  //  UI Back button triggers the native back action
   const handleBack = () => {
     // This tells the browser to go back, which triggers the 'popstate' listener above!
     window.history.back(); 
@@ -64,7 +64,6 @@ export default function Home() {
         <div className="flex h-full w-full">
           {/* LEFT SIDE: Sidebar */}
           <div className={`${activeConversation ? "hidden md:block" : "block"} w-full md:w-80 h-full shrink-0`}>
-            {/* 🌟 UPDATED: Use the new handleSelectConversation function */}
             <Sidebar onSelectConversation={handleSelectConversation} />
           </div>
 
@@ -72,8 +71,7 @@ export default function Home() {
           <div className={`${activeConversation ? "flex" : "hidden md:flex"} flex-1 flex-col bg-gray-50 dark:bg-gray-900 h-full transition-colors duration-200`}>
             {activeConversation ? (
               <ChatWindow 
-                conversationId={activeConversation} 
-                // 🌟 UPDATED: Use the new handleBack function
+                conversationId={activeConversation}
                 onBack={handleBack} 
               />
             ) : (

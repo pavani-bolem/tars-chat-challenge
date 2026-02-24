@@ -23,7 +23,7 @@ export default defineSchema({
     userId: v.id("users"),
     conversationId: v.id("conversations"),
     lastReadMessageId: v.optional(v.id("messages")), 
-    typingUntil: v.optional(v.number()), // 🌟 NEW: Tracks typing expiration
+    typingUntil: v.optional(v.number()), // Tracks typing expiration
   })
     .index("by_conversationId", ["conversationId"])
     .index("by_userId", ["userId"])

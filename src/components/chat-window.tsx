@@ -159,7 +159,7 @@ export function ChatWindow({
           </button>
         )}
         
-        {/* 🌟 FIXED: Using !convDetails instead of convDetails === undefined */}
+        {/* Using !convDetails instead of convDetails === undefined */}
         {!convDetails ? (
            <div className="animate-pulse flex gap-3"><div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-full"></div><div className="w-24 h-4 mt-3 bg-gray-200 dark:bg-gray-800 rounded"></div></div>
         ) : (
@@ -317,7 +317,7 @@ export function ChatWindow({
             value={newMessage} 
             onChange={handleTyping} 
             placeholder="Type your message..."
-            // 🌟 FIXED: Added text-gray-900 and explicitly styled the placeholder
+            // Added text-gray-900 and explicitly styled the placeholder
             className="flex-1 px-5 py-3 bg-gray-100 text-gray-900 placeholder-gray-400 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 rounded-full outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button 
