@@ -30,6 +30,20 @@ export function Sidebar({ onSelectConversation }: { onSelectConversation?: (id: 
   const [error, setError] = useState("");
 
   useEffect(() => setMounted(true), []);
+  // Listen for hardware back button to close the "New Chat" view
+  useEffect(() => {
+    const handlePopState = () => {
+      if (isCreating) {
+        setIsCreating(false);
+        setIsSubmitting(false);
+        setSelectedUsers([]);
+        setGroupName("");
+        setError("");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isCreating]);
 
   // Filter conversations for the main view
   const filteredConversations = conversations?.filter((conv) =>
@@ -60,16 +74,25 @@ export function Sidebar({ onSelectConversation }: { onSelectConversation?: (id: 
 
     setIsSubmitting(true);
     setError(""); // Clear previous errors
-    
     try {
       const convId = await createGroup({ name: groupName.trim(), memberIds: selectedUsers });
-      setIsCreating(false);
-      setGroupName("");
-      setSelectedUsers([]);
-      if (onSelectConversation) onSelectConversation(convId);
+      
+      // Pop the 'new-chat' state off the phone's history
+      window.history.back();
+      
+      // Open the chat window a split second later
+      setTimeout(() => {
+        setIsCreating(false);
+        setGroupName("");
+        setSelectedUsers([]);
+        if (onSelectConversation) onSelectConversation(convId);
+      }, 50);
+
     } catch (err) {
       setError("Failed to create group. Please check your connection and try again.");
-    } finally {
+      setIsSubmitting(false); 
+    }
+     finally {
       setIsSubmitting(false); // Remove loading spinner
     }
   };
@@ -87,7 +110,11 @@ export function Sidebar({ onSelectConversation }: { onSelectConversation?: (id: 
           <div className="flex items-center gap-3">
             {!isCreating && (
               <button 
-                onClick={() => setIsCreating(true)}
+                // 🌟 FIXED: Push a history state before setting isCreating to true
+                onClick={() => {
+                  window.history.pushState({ view: "new-chat" }, "");
+                  setIsCreating(true);
+                }}
                 className="p-2 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
                 title="New Chat or Group"
               >
@@ -128,7 +155,10 @@ export function Sidebar({ onSelectConversation }: { onSelectConversation?: (id: 
         {/* --- VIEW 1: CREATING A NEW CHAT / GROUP --- */}
         {isCreating ? (
           <div className="p-4 flex flex-col gap-4 animate-in slide-in-from-right-4 duration-200">
-            <button onClick={() => { setIsCreating(false); setIsSubmitting(false); setError(""); setSelectedUsers([]); setGroupName(""); }} className="text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 w-fit hover:underline">
+            <button 
+              onClick={() => window.history.back()} 
+              className="text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 w-fit hover:underline"
+            >
               ← Back to Inbox
             </button>
 
@@ -163,8 +193,14 @@ export function Sidebar({ onSelectConversation }: { onSelectConversation?: (id: 
                         toggleUserSelection(user._id);
                       } else {
                         const conversationId = await startChat({ otherUserId: user._id });
-                        setIsCreating(false);
-                        if (onSelectConversation) onSelectConversation(conversationId);
+                        
+                        // 🌟 NEW: Pop the state off the history stack
+                        window.history.back();
+                        
+                        setTimeout(() => {
+                          setIsCreating(false);
+                          if (onSelectConversation) onSelectConversation(conversationId);
+                        }, 50);
                       }
                     }} 
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors"
